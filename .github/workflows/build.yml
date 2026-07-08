@@ -1,0 +1,36 @@
+name: Build World Menu
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pick source (repo source first, else newest zip)
+        run: |
+          ROOT_GRADLE=$(find . -maxdepth 3 -name build.gradle -not -path './_build/*' | head -1)
+          if [ -n "$ROOT_GRADLE" ]; then
+            echo "Using repo source: $ROOT_GRADLE"
+            echo "BUILD_DIR=$(dirname "$ROOT_GRADLE")" >> "$GITHUB_ENV"
+          else
+            NEWEST=$(ls -t *.zip 2>/dev/null | head -1 || true)
+            if [ -z "$NEWEST" ]; then echo "No build.gradle and no zip!"; ls -la; exit 1; fi
+            echo "Building from zip: $NEWEST"
+            rm -rf _build && mkdir _build && unzip -o "$NEWEST" -d _build
+            echo "BUILD_DIR=$(dirname "$(find _build -name build.gradle | head -1)")" >> "$GITHUB_ENV"
+          fi
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10'
+      - name: Build
+        run: |
+          cd "$BUILD_DIR"
+          gradle build --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WorldMenu
+          path: '${{ env.BUILD_DIR }}/build/libs/*.jar'
+          if-no-files-found: error
